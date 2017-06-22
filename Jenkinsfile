@@ -111,7 +111,7 @@ pipeline {
 
         stage('QA:Local Integration Tests') {
             when {
-                param.runIntegTests
+                params.runIntegTests
             }
 
              steps {
