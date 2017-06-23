@@ -47,8 +47,8 @@ pipeline {
 
         stage('Git Checkout and Preparation'){
             steps {
-                //checkout scm
-                git url: 'https://github.com/h2oai/sparkling-water.git', branch: 'master'
+                checkout scm
+                //git url: 'https://github.com/h2oai/sparkling-water.git', branch: 'master'
                 sh """
                 if [ ! -d "${env.SPARK_HOME}" ]; then
                         wget -q "http://d3kbcqa49mib13.cloudfront.net/${env.SPARK}.tgz"
@@ -190,31 +190,6 @@ pipeline {
 
 
 // Def sections
-
-def success(message) {
-
-    sh 'echo "Test ran successful"'
-
-    step([$class: 'GitHubCommitStatusSetter',
-        contextSource: [$class: 'ManuallyEnteredCommitContextSource',
-        context: 'h2o-ops'],
-        statusResultSource: [$class: 'ConditionalStatusResultSource',
-        results: [[$class: 'AnyBuildResult',
-        state: 'SUCCESS',
-        message: message ]]]])
-}
-
-def failure(message) {
-
-        sh 'echo "Test failed "'
-        step([$class: 'GitHubCommitStatusSetter',
-            contextSource: [$class: 'ManuallyEnteredCommitContextSource',
-            context: 'h2o-ops'],
-            statusResultSource: [$class: 'ConditionalStatusResultSource',
-            results: [[$class: 'AnyBuildResult',
-            message: message,
-            state: 'FAILURE']]]])
-}
 
 def testReport(reportDirectory, title) {
     publishHTML target: [
