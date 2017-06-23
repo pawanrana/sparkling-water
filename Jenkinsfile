@@ -43,145 +43,142 @@ pipeline {
         H2O_EXTENDED_JAR="${env.WORKSPACE}/assembly-h2o/private/"
     }
 
-    stages {
+    stage('Git Checkout and Preparation'){
+        steps {
+            checkout scm
+            //git url: 'https://github.com/h2oai/sparkling-water.git', branch: 'master'
+            sh """
+            if [ ! -d "${env.SPARK_HOME}" ]; then
+                    wget -q "http://d3kbcqa49mib13.cloudfront.net/${env.SPARK}.tgz"
+                    mkdir -p "${env.SPARK_HOME}"
+                    tar zxvf ${env.SPARK}.tgz -C "${env.SPARK_HOME}" --strip-components 1
+                    rm -rf ${env.SPARK}.tgz
+            fi
+            """
+        }
+    }
 
-        stage('Git Checkout and Preparation'){
-            steps {
-                checkout scm
-                //git url: 'https://github.com/h2oai/sparkling-water.git', branch: 'master'
+    stage('QA: Prepare Environment and Data') {
+        steps {
+            sh """
+                # Setup 
+                echo "spark.driver.extraJavaOptions -Dhdp.version="${params.hdpVersion}"" >> ${env.SPARK_HOME}/conf/spark-defaults.conf
+                echo "spark.yarn.am.extraJavaOptions -Dhdp.version="${params.hdpVersion}"" >> ${env.SPARK_HOME}/conf/spark-defaults.conf
+                echo "spark.executor.extraJavaOptions -Dhdp.version="${params.hdpVersion}"" >> ${env.SPARK_HOME}/conf/spark-defaults.conf
+
+                echo "-Dhdp.version="${params.hdpVersion}"" >> ${env.SPARK_HOME}/conf/java-opts
+               """
+
+            sh """
+                mkdir -p ${env.WORKSPACE}/examples/bigdata/laptop/citibike-nyc/
+                cp /home/0xdiag/bigdata/laptop/citibike-nyc/2013-07.csv ${env.WORKSPACE}/examples/bigdata/laptop/citibike-nyc/2013-07.csv
+                cp /home/0xdiag/bigdata/laptop/citibike-nyc/2013-08.csv ${env.WORKSPACE}/examples/bigdata/laptop/citibike-nyc/2013-08.csv
+                cp /home/0xdiag/bigdata/laptop/citibike-nyc/2013-09.csv ${env.WORKSPACE}/examples/bigdata/laptop/citibike-nyc/2013-09.csv
+                cp /home/0xdiag/bigdata/laptop/citibike-nyc/2013-10.csv ${env.WORKSPACE}/examples/bigdata/laptop/citibike-nyc/2013-10.csv
+                cp /home/0xdiag/bigdata/laptop/citibike-nyc/2013-11.csv ${env.WORKSPACE}/examples/bigdata/laptop/citibike-nyc/2013-11.csv
+                cp /home/0xdiag/bigdata/laptop/citibike-nyc/2013-12.csv ${env.WORKSPACE}/examples/bigdata/laptop/citibike-nyc/2013-12.csv
+                cp /home/0xdiag/bigdata/laptop/citibike-nyc/31081_New_York_City__Hourly_2013.csv ${env.WORKSPACE}/examples/bigdata/laptop/citibike-nyc/31081_New_York_City__Hourly_2013.csv
+               """
+
+            sh """
+                # Download h2o-python client, save it in private directory
+                # and export variable H2O_PYTHON_WHEEL driving building of pysparkling package
+                mkdir -p ${env.WORKSPACE}/private/
+                curl -s `./gradlew -q printH2OWheelPackage` > ${env.WORKSPACE}/private/h2o.whl
+                ./gradlew -q extendJar -PdownloadH2O=${params.driverHadoopVersion}
+               """
+        }
+    }
+
+    stage('QA: Lint and Unit Tests') {
+
+         steps {
                 sh """
-                if [ ! -d "${env.SPARK_HOME}" ]; then
-                        wget -q "http://d3kbcqa49mib13.cloudfront.net/${env.SPARK}.tgz"
-                        mkdir -p "${env.SPARK_HOME}"
-                        tar zxvf ${env.SPARK}.tgz -C "${env.SPARK_HOME}" --strip-components 1
-                        rm -rf ${env.SPARK}.tgz
-                fi
+                # Build, run regular tests
+                ${env.WORKSPACE}/gradlew clean build -x integTest
                 """
+        }
+        post {
+            always {
+                arch '**/build/*tests.log,**/*.log, **/out.*, **/*py.out.txt,examples/build/test-results/binary/integTest/*, **/stdout, **/stderr,**/build/**/*log*, py/build/py_*_report.txt,**/build/reports/'
+                junit 'core/build/test-results/test/*.xml' 
+                testReport 'core/build/reports/tests/test', 'Core Unit tests'
             }
         }
+    }
 
-        stage('QA: Prepare Environment and Data') {
-            steps {
-                sh """
-                    # Setup 
-                    echo "spark.driver.extraJavaOptions -Dhdp.version="${params.hdpVersion}"" >> ${env.SPARK_HOME}/conf/spark-defaults.conf
-                    echo "spark.yarn.am.extraJavaOptions -Dhdp.version="${params.hdpVersion}"" >> ${env.SPARK_HOME}/conf/spark-defaults.conf
-                    echo "spark.executor.extraJavaOptions -Dhdp.version="${params.hdpVersion}"" >> ${env.SPARK_HOME}/conf/spark-defaults.conf
+    stage('QA: Integration Tests') {
 
-                    echo "-Dhdp.version="${params.hdpVersion}"" >> ${env.SPARK_HOME}/conf/java-opts
-                   """
-
-                sh """
-                    mkdir -p ${env.WORKSPACE}/examples/bigdata/laptop/citibike-nyc/
-                    cp /home/0xdiag/bigdata/laptop/citibike-nyc/2013-07.csv ${env.WORKSPACE}/examples/bigdata/laptop/citibike-nyc/2013-07.csv
-                    cp /home/0xdiag/bigdata/laptop/citibike-nyc/2013-08.csv ${env.WORKSPACE}/examples/bigdata/laptop/citibike-nyc/2013-08.csv
-                    cp /home/0xdiag/bigdata/laptop/citibike-nyc/2013-09.csv ${env.WORKSPACE}/examples/bigdata/laptop/citibike-nyc/2013-09.csv
-                    cp /home/0xdiag/bigdata/laptop/citibike-nyc/2013-10.csv ${env.WORKSPACE}/examples/bigdata/laptop/citibike-nyc/2013-10.csv
-                    cp /home/0xdiag/bigdata/laptop/citibike-nyc/2013-11.csv ${env.WORKSPACE}/examples/bigdata/laptop/citibike-nyc/2013-11.csv
-                    cp /home/0xdiag/bigdata/laptop/citibike-nyc/2013-12.csv ${env.WORKSPACE}/examples/bigdata/laptop/citibike-nyc/2013-12.csv
-                    cp /home/0xdiag/bigdata/laptop/citibike-nyc/31081_New_York_City__Hourly_2013.csv ${env.WORKSPACE}/examples/bigdata/laptop/citibike-nyc/31081_New_York_City__Hourly_2013.csv
-                   """
-
-                sh """
-                    # Download h2o-python client, save it in private directory
-                    # and export variable H2O_PYTHON_WHEEL driving building of pysparkling package
-                    mkdir -p ${env.WORKSPACE}/private/
-                    curl -s `./gradlew -q printH2OWheelPackage` > ${env.WORKSPACE}/private/h2o.whl
-                    ./gradlew -q extendJar -PdownloadH2O=${params.driverHadoopVersion}
-                   """
+        stage('QA:Local Integration Tests') {
+            when {
+                expression {
+                    params.runIntegTests
+                }
             }
-        }
-
-        stage('QA: Lint and Unit Tests') {
 
              steps {
                     sh """
                     # Build, run regular tests
-                    ${env.WORKSPACE}/gradlew clean build -x integTest
+                    ${env.WORKSPACE}/gradlew integTest -PsparkHome=${env.SPARK_HOME} 
                     """
-		    }
-			post {
-				always {
+            }
+
+            post {
+                always {
                     arch '**/build/*tests.log,**/*.log, **/out.*, **/*py.out.txt,examples/build/test-results/binary/integTest/*, **/stdout, **/stderr,**/build/**/*log*, py/build/py_*_report.txt,**/build/reports/'
-                    junit 'core/build/test-results/test/*.xml' 
-                    testReport 'core/build/reports/tests/test', 'Core Unit tests'
-				}
-			}
+                    junit 'examples/build/test-results/integTest/*.xml'
+                    testReport 'core/build/reports/tests/integTest', 'Local Core Integration tests'
+                    testReport 'examples/build/reports/tests/integTest', 'Local Examples Integration tests'
+                }
+            }
         }
 
-        stage('QA: Integration Tests') {
-
-            stage('QA:Local Integration Tests') {
-                when {
-                    expression {
-                        params.runIntegTests
-                    }
-                }
-
-                 steps {
-                        sh """
-                        # Build, run regular tests
-                        ${env.WORKSPACE}/gradlew integTest -PsparkHome=${env.SPARK_HOME} 
-                        """
-                }
-
-                post {
-                    always {
-                        arch '**/build/*tests.log,**/*.log, **/out.*, **/*py.out.txt,examples/build/test-results/binary/integTest/*, **/stdout, **/stderr,**/build/**/*log*, py/build/py_*_report.txt,**/build/reports/'
-                        junit 'examples/build/test-results/integTest/*.xml'
-                        testReport 'core/build/reports/tests/integTest', 'Local Core Integration tests'
-                        testReport 'examples/build/reports/tests/integTest', 'Local Examples Integration tests'
-                    }
+        stage('QA: Script Tests') {
+            when {
+                expression {
+                    return params.runScriptTests
                 }
             }
 
-            stage('QA: Script Tests') {
-                when {
-                    expression {
-                        return params.runScriptTests
-                    }
-                }
-
-                steps {
-                        sh """
-                        # Build, run regular tests
-                        ${env.WORKSPACE}/gradlew scriptTest
-                        """
-                }
-
-                post {
-                    always {
-                        arch '**/build/*tests.log,**/*.log, **/out.*, **/*py.out.txt,examples/build/test-results/binary/integTest/*, **/stdout, **/stderr,**/build/**/*log*, py/build/py_*_report.txt,**/build/reports/'
-                        junit 'examples/build/test-results/scriptsTest/*.xml'
-                        testReport 'examples/build/reports/tests/scriptsTest', 'Examples Script Tests'
-                    }
-                }
-            }
-
-            stage('QA:Integration tests') {
-                when {
-                    expression {
-                        return params.runIntegTests
-                    }
-                }
-
-                steps {
-
+            steps {
                     sh """
-                         ${env.WORKSPACE}/gradlew integTest -PbackendMode=${params.backendMode} -PstartH2OClusterOnYarn -PsparklingTestEnv=${params.sparklingTestEnv} -PsparkMaster=${env.MASTER} -PsparkHome=${env.SPARK_HOME} -x check -x :sparkling-water-py:integTest
-                         if [ "${params.startH2OClusterOnYarn}" = false ]; then
-                                ${env.WORKSPACE}/gradlew integTest -PbackendMode=${params.backendMode} -PsparklingTestEnv=${params.sparklingTestEnv} -PsparkMaster=${env.MASTER} -PsparkHome=${env.SPARK_HOME} -x check -x :sparkling-water-py:integTest
-                         fi
-                     """
-                }
+                    # Build, run regular tests
+                    ${env.WORKSPACE}/gradlew scriptTest
+                    """
+            }
 
-                post {
-                    always {
-                        arch '**/build/*tests.log,**/*.log, **/out.*, **/*py.out.txt,examples/build/test-results/binary/integTest/*, **/stdout, **/stderr,**/build/**/*log*, py/build/py_*_report.txt,**/build/reports/'
-                        junit 'examples/build/test-results/integTest/*.xml'
-                        //testReport 'core/build/reports/tests/integTest', "${params.backendMode} Core Integration tests"
-                        testReport 'examples/build/reports/tests/integTest', "${params.backendMode} Examples Integration tests"
-                    }
+            post {
+                always {
+                    arch '**/build/*tests.log,**/*.log, **/out.*, **/*py.out.txt,examples/build/test-results/binary/integTest/*, **/stdout, **/stderr,**/build/**/*log*, py/build/py_*_report.txt,**/build/reports/'
+                    junit 'examples/build/test-results/scriptsTest/*.xml'
+                    testReport 'examples/build/reports/tests/scriptsTest', 'Examples Script Tests'
+                }
+            }
+        }
+
+        stage('QA:Integration tests') {
+            when {
+                expression {
+                    return params.runIntegTests
+                }
+            }
+
+            steps {
+
+                sh """
+                     ${env.WORKSPACE}/gradlew integTest -PbackendMode=${params.backendMode} -PstartH2OClusterOnYarn -PsparklingTestEnv=${params.sparklingTestEnv} -PsparkMaster=${env.MASTER} -PsparkHome=${env.SPARK_HOME} -x check -x :sparkling-water-py:integTest
+                     if [ "${params.startH2OClusterOnYarn}" = false ]; then
+                            ${env.WORKSPACE}/gradlew integTest -PbackendMode=${params.backendMode} -PsparklingTestEnv=${params.sparklingTestEnv} -PsparkMaster=${env.MASTER} -PsparkHome=${env.SPARK_HOME} -x check -x :sparkling-water-py:integTest
+                     fi
+                 """
+            }
+
+            post {
+                always {
+                    arch '**/build/*tests.log,**/*.log, **/out.*, **/*py.out.txt,examples/build/test-results/binary/integTest/*, **/stdout, **/stderr,**/build/**/*log*, py/build/py_*_report.txt,**/build/reports/'
+                    junit 'examples/build/test-results/integTest/*.xml'
+                    //testReport 'core/build/reports/tests/integTest', "${params.backendMode} Core Integration tests"
+                    testReport 'examples/build/reports/tests/integTest', "${params.backendMode} Examples Integration tests"
                 }
             }
         }
