@@ -61,7 +61,7 @@ pipeline {
                 fi
                 """
                 // Cleanup
-                dir "${env.SPARK_HOME}/work" {
+                dir("${env.SPARK_HOME}/work") {
                     deleteDir()
                 }
             }
