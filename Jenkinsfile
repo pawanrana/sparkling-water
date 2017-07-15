@@ -3,7 +3,6 @@
 @Library('test-shared-library') _
 
 pipeline {
-
     // Use given machines to run pipeline
     agent { label 'mr-0xd1 || mr-0xd2 || mr-0xd3 || mr-0xd4 || mr-0xd5 || mr-0xd7 || mr-0xd8 || mr-0xd9 || mr-0xd10' }
     
@@ -15,6 +14,9 @@ pipeline {
         buildDiscarder(logRotator(numToKeepStr: '10'))
     }
 
+    //
+    // Job parameters
+    //
     parameters {
         string(name: 'branchName', defaultValue: 'master', description: 'Test given branch on top of YARN.')
         string(name: 'hdpVersion', defaultValue: 'current', description: 'HDP version to pass to Spark configuration - for example, 2.2.0.0-2041, or 2.6.0.2.2, or current. When running external tests on yarn, the current will not do since it is not automatically expanded -> so please set 2.2.6.3-1')
