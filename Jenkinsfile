@@ -1,7 +1,7 @@
 #!/usr/bin/groovy
 
 @Library('test-shared-library') _
-FIXME: SPARK_HOME/work directory needs to be deleted 
+
 pipeline {
 
     // Use given machines to run pipeline
@@ -9,6 +9,8 @@ pipeline {
     
     // Setup job options
     options {
+        ansiColor('xterm')
+        timestamps()
         timeout(time: 120, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '10'))
     }
@@ -48,7 +50,6 @@ pipeline {
         stage('Git Checkout and Preparation'){
             steps {
                 checkout scm
-                //git url: 'https://github.com/h2oai/sparkling-water.git', branch: 'master'
                 sh """
                 if [ ! -d "${env.SPARK_HOME}" ]; then
                         wget -q "http://d3kbcqa49mib13.cloudfront.net/${env.SPARK}.tgz"
@@ -57,6 +58,10 @@ pipeline {
                         rm -rf ${env.SPARK}.tgz
                 fi
                 """
+                // Cleanup
+                dir "${env.SPARK_HOME}/work" {
+                    deleteDir()
+                }
             }
         }
 
@@ -92,9 +97,10 @@ pipeline {
             }
         }
 
-        stage('QA: Lint and Unit Tests') {
+        stage('QA: Build, Lint and Unit Tests') {
 
              steps {
+                    dumpInfo 'Build Info'
                     sh """
                     # Build, run regular tests
                     ${env.WORKSPACE}/gradlew clean build -x integTest
@@ -183,23 +189,5 @@ pipeline {
             }
         }
     }
-}
-
-
-// Def sections
-
-def testReport(reportDirectory, title) {
-    publishHTML target: [
-        allowMissing: false,
-        alwaysLinkToLastBuild: true,
-        keepAll: true,
-        reportDir: reportDirectory,
-        reportFiles: 'index.html',
-        reportName: title
-    ]
-}
-
-def arch(list) {
-    archiveArtifacts artifacts: list, allowEmptyArchive: true
 }
 
